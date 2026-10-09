@@ -1,156 +1,158 @@
-# CampusEats Platform
+# CampusEats
 
-> **Production-Oriented Web Platform for University Food-Stall Pre-Ordering, Intelligent Pickup Scheduling, Stall Capacity Management, and Campus Lunch-Rush Congestion Reduction.**
+<div align="center">
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)]()
-[![Tests](https://img.shields.io/badge/tests-197%20passed%20(22%20suites)-brightgreen.svg)]()
-[![Architecture](https://img.shields.io/badge/Architecture-Modular%20Monolith-orange.svg)]()
-[![Frontend](https://img.shields.io/badge/Frontend-FROZEN%20(Phase%2015)-red.svg)]()
+### Campus food, without the lunch-rush guesswork.
 
-> **BASELINE TEST METRIC NOTICE:**
-> The lost previous Android implementation had 35 tests.
-> **This new web platform established an initial Phase 0 baseline of 21 domain tests, expanded in Phase 0.1 to 42 passing tests, reached 57 in Phase 1/1.1, 100 in Phase 2, 111 in Phase 2.1, 129 in Phase 3, 136 in Phase 3.1, and now stands at 197 passing tests across 22 suites in Phase 4 with zero failures.** No legacy claims are carried over.
+Pre-order from campus stalls, get a pickup time shaped by kitchen capacity, and let each stall work through a queue it can actually handle.
 
----
+[![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-## 1. Executive Summary & Core Problem
+[Explore the product](PRODUCT_SPEC.md) · [Read the architecture](ARCHITECTURE.md) · [Run locally](#run-locally)
 
-During university peak lunch hours (typically 12:00 PM – 2:00 PM), campus food stalls face extreme congestion. Students with short 30-to-45-minute breaks spend 20+ minutes waiting in physical lines, while food stall kitchens get swamped by uncoordinated, simultaneous orders that exceed physical preparation capacity.
-
-**CampusEats is NOT a generic restaurant delivery app.** It is a capacity-throttled, preparation-aware scheduling platform designed to solve:
-$$\text{DEMAND} \longrightarrow \text{KITCHEN CAPACITY} \longrightarrow \text{PREPARATION} \longrightarrow \text{PICKUP SLOT} \longrightarrow \text{DYNAMIC RESCHEDULING}$$
-
-### Key Differentiators
-1. **Dynamic Pickup Scheduling**: Realistic calculation of earliest feasible pickup timestamps based on prep time, parallel kitchen capacity, live queue depth, and operational buffers.
-2. **Multi-Stall Split Checkout**: Single checkout creating isolated `MASTER_ORDER` and per-stall `SUB_ORDER` items with decoupled lifecycles and fault-isolated refunds.
-3. **Structured Partial Advance Payment**: Strictly enforced 50%–100% advance deposit policy via UPI, preserving liquidity while securing stall commitment.
-4. **Verified Student Identity with Liveness**: Self-contained verification requiring ID cards and anti-spoofing challenge abstractions (blink, head turns) without direct university ERP dependency.
-5. **Cryptographically Hash-Chained Audit Log**: Tamper-evident SHA-256 audit log tracking administrative, pricing, capacity, and refund actions.
+</div>
 
 ---
 
-## 2. Architecture-First Staged Development Strategy
+CampusEats is a campus dining platform built around a practical constraint: a kitchen has finite people, stations, and time. Students can browse stalls, build a multi-stall cart, and place pickup orders; stall teams manage menus and order flow; administrators handle verification and oversight.
 
-CampusEats adheres strictly to an **Architecture-First** roadmap. **The frontend is frozen until Phase 14 is complete and verified.**
+## The flow
 
-```
-Phase 0  ──► Product Constitution & Requirements Freeze (Current)
-Phase 1  ──► Domain Model & State Machines
-Phase 2  ──► Database Architecture
-Phase 3  ──► Backend Foundation & Shared Infrastructure
-Phase 4  ──► Authentication & Authorization (RBAC)
-Phase 5  ──► Student Verification & Liveness Provider
-Phase 6  ──► Stall Operations, Inventory & Acceptance Strategy
-Phase 7  ──► Order Engine (Master/Sub-Order Decomposition)
-Phase 8  ──► Smart Scheduling / Capacity Engine
-Phase 9  ──► Payments (UPI) & Isolated Refunds
-Phase 10 ──► Realtime / Event Infrastructure
-Phase 11 ──► Admin & Stall Owner APIs
-Phase 12 ──► Security Hardening & Data Minimization
-Phase 13 ──► Complete Automated Testing Suite
-Phase 14 ──► Production Deployment & Infrastructure
----------------------------------------------------------------------
-Phase 15 ──► Frontend, Finally (React Client)
-Phase 16 ──► End-to-End QA & Production Demo
+```mermaid
+flowchart LR
+    Student[Student] --> Browse[Browse stalls and menus]
+    Browse --> Cart[Build a multi-stall cart]
+    Cart --> Schedule[Calculate feasible pickup]
+    Schedule --> Checkout[Checkout and payment]
+    Checkout --> Kitchens[Independent stall orders]
+    Kitchens --> Updates[Order and schedule updates]
+    Updates --> Student
 ```
 
----
+Pickup scheduling considers preparation workload, parallel kitchen capacity, active queue, and an operational buffer. A shared checkout is split into stall-scoped suborders, so kitchen execution can progress independently. Identity verification, payment, refunds, realtime updates, and audit records are modeled in dedicated backend modules.
 
-## 3. Platform Actors & Roles
+## What’s here
 
-| Role | Definition & Authority Scope |
-| :--- | :--- |
-| **`STUDENT`** | Verified campus student. Can browse open/busy stalls, configure orders across stalls, submit advance payments, view live pickup status, and collect food. |
-| **`STALL_OWNER`** | Approved vendor entity owning a stall in a campus block. Configures kitchen capacity, operating hours, menu pricing, processing mode (Manual/Automatic), and delegates staff. |
-| **`STALL_STAFF`** | Subordinate account scoped to a specific stall with explicit permissions (`MANAGE_ORDERS`, `MANAGE_MENU`, `VIEW_PAYMENTS`, `VIEW_ANALYTICS`, `MANAGE_INVENTORY`). |
-| **`ADMIN`** | Platform-level administrator. Reviews student verifications, approves stalls, configures capacity overrides, manages isolated refunds, and audits hash-chains. |
+| Surface | What it supports |
+| --- | --- |
+| **Student experience** | Stall and menu browsing, cart, checkout, order history and tracking, profile, and verification flows. |
+| **Stall operations** | Owner dashboard, menu management, kitchen queue, and stall settings. |
+| **Administration** | Student verification review, operating-hours policies, refunds, and audit views. |
+| **Backend API** | Authentication, stalls, checkout and order lifecycles, verification and liveness, payments and refunds, and server-sent realtime events. |
 
----
+The API currently composes mock payment and liveness providers with local document storage for development. Production integrations and deployment require environment-specific configuration; see [production setup](#operations-and-security) before exposing a deployment.
 
-## 4. Documentation Index
+## Architecture
 
-Detailed architectural specifications are maintained in the root documentation repository:
+The backend is a TypeScript/Express modular monolith. Domain and application logic are grouped by bounded context, Prisma persists data in PostgreSQL, and the Next.js frontend proxies `/api/v1` requests to the API during development.
 
-- 📋 [PRODUCT_SPEC.md](PRODUCT_SPEC.md): Comprehensive functional and business rules.
-- 🏗️ [ARCHITECTURE.md](ARCHITECTURE.md): System topology, modular monolith structure, and data flows.
-- 📐 [DOMAIN_MODEL.md](DOMAIN_MODEL.md): Core domain entities, value objects, and aggregate roots.
-- 🗄️ [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md): Relational schema, indices, constraints, and Prisma mappings.
-- 🔄 [ORDER_STATE_MACHINE.md](ORDER_STATE_MACHINE.md): Finite state machines for Master and Sub-Orders.
-- 💳 [PAYMENT_SPEC.md](PAYMENT_SPEC.md): Partial payment (50%-100%), UPI lifecycle, and idempotency.
-- 💸 [REFUND_SPEC.md](REFUND_SPEC.md): Fault-isolated cancellation and sub-order refund flows.
-- ⏱️ [SCHEDULING_ENGINE.md](SCHEDULING_ENGINE.md): Mathematical capacity modeling and dynamic rescheduling.
-- 🏪 [STALL_OPERATIONS.md](STALL_OPERATIONS.md): Operational states, manual vs automatic processing, and inventory.
-- 🪪 [IDENTITY_VERIFICATION.md](IDENTITY_VERIFICATION.md): Liveness challenges and document storage pipeline.
-- 🔑 [AUTHENTICATION.md](AUTHENTICATION.md): HMAC-signed JWTs, RefreshSession model, token rotation, and server-side revocation.
-- 🛡️ [SECURITY.md](SECURITY.md): Threat model, data minimization, PII masking, and file upload rules.
-- 📡 [API_SPEC.md](API_SPEC.md): REST endpoints, OpenAPI schemas, and error taxonomy.
-- ⚡ [REALTIME_ARCHITECTURE.md](REALTIME_ARCHITECTURE.md): Event bus, WebSocket/SSE transports, and deduplication.
-- 🔒 [AUDIT_LOG_SPEC.md](AUDIT_LOG_SPEC.md): SHA-256 hash chaining and tamper-evident verification.
-- 🧪 [TEST_PLAN.md](TEST_PLAN.md): Test matrix spanning domain unit tests to race condition simulations.
-- 🚀 [DEPLOYMENT.md](DEPLOYMENT.md): Production infrastructure, reverse proxy, PostgreSQL, and Redis.
-- 🛠️ [DEVELOPMENT.md](DEVELOPMENT.md): Local developer setup, workflows, and conventions.
-- 📝 [CHANGELOG.md](CHANGELOG.md): Historical record of versions and modifications.
-- 🏛️ [ADR Directory](docs/adr/): Architecture Decision Records (ADR-001 through ADR-008).
+| Layer | Technologies |
+| --- | --- |
+| Web app | Next.js 16, React 19, TypeScript, Tailwind CSS |
+| API | Node.js 20+, Express, TypeScript, Zod |
+| Data | PostgreSQL 16, Prisma |
+| Testing | Jest, Supertest |
 
----
-
-## 5. Technology Stack & Directory Structure
-
-```
-campuseats/
-├── .env.example
-├── .gitignore
-├── package.json
-├── tsconfig.json
-├── jest.config.ts
-├── prisma/
-│   └── schema.prisma
-├── docs/
-│   └── adr/
-├── src/
-│   ├── app.ts                  # Minimal Express application scaffolding
-│   ├── server.ts               # Server bootstrap & healthcheck
-│   ├── shared/                 # Shared Kernel
-│   │   ├── domain/             # AggregateRoot, Entity, ValueObject base classes
-│   │   ├── errors/             # Domain & HTTP Error hierarchy
-│   │   ├── infrastructure/     # PrismaClient, Logger, Idempotency
-│   │   ├── security/           # PII Masking, Hash Chaining utils
-│   │   └── types/              # Common result & pagination types
-│   └── modules/                # Bounded Contexts
-│       ├── identity/           # User, StudentProfile, Verification, Liveness
-│       ├── stall/              # Stall, OperatingHours, Menu, Inventory, Capacity
-│       ├── ordering/           # MasterOrder, SubOrder, State Machine
-│       ├── scheduling/         # PickupSchedulingService, Queue models
-│       ├── payment/            # PaymentProvider, Advance percentage rules, UPI
-│       ├── realtime/           # DomainEvents, RealtimeGatewayProvider
-│       └── audit/              # SHA-256 Hash Chaining Service, AuditLogger
-└── tests/
-    └── unit/                   # Pure domain unit tests
+```text
+src/
+  modules/       identity · stall · ordering · scheduling · payment · realtime · audit
+  shared/        middleware · infrastructure · security · validation
+frontend/src/
+  app/           student, stall, owner, admin, checkout, and order routes
+  features/      auth, cart, checkout, menus, orders, payments, realtime, and more
+prisma/          schema and database migrations
+tests/           unit and integration suites
+docs/            production runbooks and architecture decision records
+infra/storage/   object-storage policy examples
 ```
 
----
+## Run locally
 
-## 6. Quick Start (Development Backend)
+### Prerequisites
+
+- Node.js 20 or newer and npm
+- Docker with Docker Compose, or a local PostgreSQL 16 instance
+
+### 1. Configure the API and database
 
 ```bash
-# 1. Install dependencies
+git clone https://github.com/abdul78-create/CampusEats.git
+cd CampusEats
 npm install
-
-# 2. Setup environment variables
 cp .env.example .env
+```
 
-# 3. Generate Prisma client
+Set the local PostgreSQL credentials in `.env` and make sure `DATABASE_URL` uses the same values. Then start the database and prepare Prisma:
+
+```bash
+docker compose up -d postgres
 npm run prisma:generate
+npm run prisma:migrate
+```
 
-# 4. Run automated domain test suite
-npm run test
+On Windows PowerShell, use `Copy-Item .env.example .env` for the copy command. Start the API from the repository root:
 
-# 5. Start development server (Health check only - NO UI)
+```bash
 npm run dev
 ```
 
-Server endpoints available in Phase 0:
-- `GET /health` - Server health status and environment check.
-- `GET /api/v1/health` - Healthcheck endpoint with timestamp and uptime.
-- `GET /api/v1/spec` - OpenAPI schema preview.
+The API listens on `http://localhost:4000`. Its basic health endpoint is `http://localhost:4000/health`.
+
+### 2. Start the web app
+
+In a second terminal:
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open `http://localhost:3000`. The frontend's Next.js rewrite forwards `/api/v1` calls to `http://localhost:4000` by default. To change the API host, set `NEXT_PUBLIC_API_BASE_URL` in `frontend/.env.local` and restart the dev server. In PowerShell, use `Copy-Item .env.example .env.local` from the `frontend` directory.
+
+## Useful commands
+
+Run backend commands from the repository root and frontend commands from `frontend/`.
+
+| Command | Purpose |
+| --- | --- |
+| `npm test` | Run backend Jest tests |
+| `npm run typecheck` | Type-check the backend |
+| `npm run build` | Compile the backend to `dist/` |
+| `npm run prisma:generate` | Generate the Prisma client |
+| `npm run lint` | Lint the frontend |
+| `npm run build` | Build the frontend for production |
+
+The last two commands are frontend scripts; run them inside `frontend/`.
+
+## Operations and security
+
+- Keep `.env`, `frontend/.env.local`, credentials, and private keys out of Git. The checked-in `.env.example` files are templates, not production configuration.
+- `NEXT_PUBLIC_` variables are bundled for the browser; never put secrets in them.
+- Local development defaults to mock payment and liveness providers. Configure and verify production providers before accepting real payments or identity documents.
+- For deployment, storage, payment, and secret-management guidance, start with [Deployment](DEPLOYMENT.md), [Secrets Management](docs/SECRETS_MANAGEMENT.md), [Payment Production Setup](docs/PAYMENT_PRODUCTION_SETUP.md), and [Object Storage Setup](docs/OBJECT_STORAGE_SETUP.md).
+
+## Documentation
+
+| Topic | Guide |
+| --- | --- |
+| Product scope and business rules | [Product specification](PRODUCT_SPEC.md) · [Stall operations](STALL_OPERATIONS.md) |
+| System structure and data | [Architecture](ARCHITECTURE.md) · [Domain model](DOMAIN_MODEL.md) · [Database schema](DATABASE_SCHEMA.md) |
+| Orders and pickup | [Order state machine](ORDER_STATE_MACHINE.md) · [Scheduling engine](SCHEDULING_ENGINE.md) |
+| Identity and access | [Authentication](AUTHENTICATION.md) · [Identity verification](IDENTITY_VERIFICATION.md) · [Security](SECURITY.md) |
+| Payments and audit | [Payment specification](PAYMENT_SPEC.md) · [Refund specification](REFUND_SPEC.md) · [Audit log](AUDIT_LOG_SPEC.md) |
+| API and realtime | [API specification](API_SPEC.md) · [Realtime architecture](REALTIME_ARCHITECTURE.md) |
+| Engineering | [Development guide](DEVELOPMENT.md) · [Test plan](TEST_PLAN.md) · [Changelog](CHANGELOG.md) · [Architecture decisions](docs/adr/) |
+| Production runbooks | [Database](docs/DATABASE_PRODUCTION_SETUP.md) · [Payments](docs/PAYMENT_PRODUCTION_SETUP.md) · [Object storage](docs/OBJECT_STORAGE_SETUP.md) · [Secrets](docs/SECRETS_MANAGEMENT.md) |
+
+---
+
+<div align="center">
+
+Built for campus kitchens, short breaks, and pickup times that mean something.
+
+</div>
