@@ -1,0 +1,704 @@
+// CampusEats Database Schema
+// Production Relational Model using PostgreSQL
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  STUDENT
+  STALL_OWNER
+  ADMIN
+  STALL_STAFF
+}
+
+enum StudentAccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum VerificationStatus {
+  PENDING_SUBMISSION
+  UNDER_REVIEW
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+enum VerificationRejectionReason {
+  INVALID_DOCUMENT
+  DOCUMENT_UNREADABLE
+  WRONG_DOCUMENT_TYPE
+  IDENTITY_MISMATCH
+  EXPIRED_DOCUMENT
+  INSUFFICIENT_INFORMATION
+  DUPLICATE_SUBMISSION
+  OTHER
+}
+
+enum LivenessChallengeType {
+  NATURAL_BLINK
+  HEAD_TURN_LEFT
+  HEAD_TURN_RIGHT
+}
+
+enum LivenessSessionStatus {
+  PENDING
+  PASSED
+  FAILED
+  EXPIRED
+}
+
+enum LivenessDecision {
+  LIVE
+  SPOOF
+  INCONCLUSIVE
+}
+
+enum StallStatus {
+  CLOSED
+  OPEN
+  BUSY
+  TEMPORARILY_PAUSED
+}
+
+enum OrderProcessingMode {
+  MANUAL
+  AUTOMATIC
+}
+
+enum StaffPermissionType {
+  MANAGE_ORDERS
+  MANAGE_MENU
+  VIEW_PAYMENTS
+  VIEW_ANALYTICS
+  MANAGE_INVENTORY
+}
+
+enum ItemAvailabilityState {
+  AVAILABLE
+  SOLD_OUT
+}
+
+enum MasterOrderStatus {
+  PENDING_PAYMENT
+  PAYMENT_CONFIRMED
+  PARTIALLY_FULFILLED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum SubOrderStatus {
+  PENDING_PAYMENT
+  PAYMENT_CONFIRMED
+  CONFIRMED
+  PREPARING
+  READY
+  COLLECTED
+  PAYMENT_FAILED
+  REJECTED
+  CANCELLED
+  REFUND_PENDING
+  REFUNDED
+  EXPIRED
+  MISSED_PICKUP
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING_VERIFICATION
+  SUCCESS
+  FAILED
+  PARTIALLY_PAID
+  EXPIRED
+}
+
+enum TransactionType {
+  ADVANCE
+  REMAINING_BALANCE
+}
+
+enum RefundStatus {
+  REFUND_PENDING
+  PROCESSING
+  REFUNDED
+  FAILED
+}
+
+enum NotificationType {
+  ORDER_STATUS
+  SCHEDULE_SHIFTED
+  PAYMENT_CONFIRMATION
+  REFUND_PROCESSED
+  VERIFICATION_UPDATE
+  SYSTEM_ALERT
+}
+
+enum AuditActionType {
+  USER_VERIFIED
+  USER_SUSPENDED
+  USER_REJECTED
+  STALL_CREATED
+  STALL_STATUS_OVERRIDE
+  STALL_CAPACITY_OVERRIDE
+  ORDER_MANUAL_ACCEPT
+  ORDER_MANUAL_REJECT
+  ADMIN_CANCEL_ORDER
+  ADMIN_REFUND_PROCESSED
+  SECURITY_POLICY_UPDATE
+  SENSITIVE_DATA_ACCESS
+  AUTH_LOGIN_SUCCESS
+  AUTH_LOGOUT
+  AUTH_TOKEN_ROTATED
+  AUTH_REPLAY_DETECTED
+  AUTH_SESSION_REVOKED
+  STUDENT_DOCUMENT_SUBMITTED
+  VERIFICATION_REVIEW_STARTED
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  STUDENT_SUSPENDED
+  STUDENT_REACTIVATED
+  STUDENT_DOCUMENT_ACCESSED
+  LIVENESS_EVIDENCE_ACCESSED
+  PAYMENT_INITIATED
+  PAYMENT_COMPLETED
+  PAYMENT_FAILED
+  PAYMENT_EXPIRED
+  BALANCE_SETTLED_ONLINE
+  REFUND_INITIATED
+  REFUND_COMPLETED
+  REFUND_FAILED
+}
+
+// ==========================================
+// USER & IDENTITY MODELS
+// ==========================================
+
+model User {
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  phoneNumber         String               @unique
+  passwordHash        String
+  role                UserRole             @default(STUDENT)
+  isActive            Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+
+  studentProfile      StudentProfile?
+  ownedStalls         Stall[]              @relation("StallOwner")
+  staffAccount        StaffAccount?
+  masterOrders        MasterOrder[]
+  auditLogs           AuditLog[]           @relation("ActorAuditLogs")
+  notifications       Notification[]
+  refreshSessions     RefreshSession[]
+
+  @@index([email])
+  @@index([phoneNumber])
+  @@index([role])
+}
+
+model StudentProfile {
+  id                    String                @id @default(uuid())
+  userId                String                @unique
+  fullName              String
+  universityRegNumber   String                @unique
+  profilePhotoUrl       String?
+  accountStatus         StudentAccountStatus  @default(PENDING_VERIFICATION)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifications         StudentVerification[]
+
+  @@index([universityRegNumber])
+  @@index([accountStatus])
+}
+
+model StudentVerification {
+  id                    String                       @id @default(uuid())
+  studentProfileId      String
+  status                VerificationStatus           @default(PENDING_SUBMISSION)
+  rejectionReasonCode   VerificationRejectionReason?
+  rejectionReason       String?
+  reviewedByAdminId     String?
+  reviewedAt            DateTime?
+  submittedAt           DateTime?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+
+  studentProfile        StudentProfile               @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  identityDocument      IdentityDocument?
+  livenessVerification  LivenessVerification?
+  livenessSessions      LivenessSession[]
+
+  @@index([studentProfileId])
+  @@index([status])
+}
+
+model IdentityDocument {
+  id                    String                @id @default(uuid())
+  verificationId        String                @unique
+  documentType          String                @default("UNIVERSITY_ID_CARD")
+  originalFilename      String?
+  fileStoragePath       String
+  fileMimeType          String
+  fileSizeBytes         Int
+  fileSha256Checksum    String
+  createdAt             DateTime              @default(now())
+
+  verification          StudentVerification   @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+}
+
+model LivenessVerification {
+  id                    String                @id @default(uuid())
+  verificationId        String                @unique
+  providerName          String
+  providerSessionId     String?
+  naturalBlinkPassed    Boolean               @default(false)
+  headTurnLeftPassed    Boolean               @default(false)
+  headTurnRightPassed   Boolean               @default(false)
+  confidenceScore       Float?
+  isLiveHuman           Boolean               @default(false)
+  consecutiveFailures   Int                   @default(0)
+  lastFailureAt         DateTime?
+  lockedUntil           DateTime?
+  evidenceStoragePath   String?
+  verifiedAt            DateTime?
+  metadata              Json?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  verification          StudentVerification   @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+
+  @@index([verificationId])
+}
+
+model LivenessSession {
+  id                  String                @id @default(uuid())
+  verificationId      String
+  sessionNonce        String                @unique
+  challengeSequence   LivenessChallengeType[]
+  challengeParams     Json
+  status              LivenessSessionStatus @default(PENDING)
+  expiresAt           DateTime
+  evidenceStoragePath String?
+  evidenceSha256      String?
+  providerReference   String?
+  confidenceScore     Float?
+  decision            LivenessDecision?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  verification        StudentVerification   @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+
+  @@index([verificationId])
+  @@index([status, expiresAt])
+}
+
+model LivenessEvidenceDigest {
+  id              String    @id @default(uuid())
+  sha256Digest    String    @unique
+  sessionId       String
+  studentUserId   String
+  createdAt       DateTime  @default(now())
+
+  @@index([sha256Digest])
+}
+
+model RefreshSession {
+  id                  String    @id @default(uuid())
+  userId              String
+  tokenHash           String    @unique
+  familyId            String    @default(uuid())
+  expiresAt           DateTime
+  createdAt           DateTime  @default(now())
+  revokedAt           DateTime?
+  replacedBySessionId String?
+  userAgent           String?
+  ipAddress           String?
+
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([familyId])
+}
+
+// ==========================================
+// STALL MODELS
+// ==========================================
+
+model Stall {
+  id                    String                @id @default(uuid())
+  ownerId               String
+  name                  String
+  campusBlock           String
+  description           String?
+  imageUrl              String?
+  liveStatus            StallStatus           @default(CLOSED)
+  processingMode        OrderProcessingMode   @default(MANUAL)
+  isApproved            Boolean               @default(false)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deletedAt             DateTime?
+
+  owner                 User                  @relation("StallOwner", fields: [ownerId], references: [id])
+  operatingHours        StallOperatingHour[]
+  capacity              StallCapacity?
+  staffAccounts         StaffAccount[]
+  menuItems             MenuItem[]
+  subOrders             SubOrder[]
+
+  @@index([campusBlock])
+  @@index([liveStatus])
+  @@index([isApproved])
+}
+
+model StallOperatingHour {
+  id                    String                @id @default(uuid())
+  stallId               String
+  dayOfWeek             Int                   // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  openTime              String                // Format: "HH:mm" (e.g. "09:00")
+  closeTime             String                // Format: "HH:mm" (e.g. "17:00")
+  isClosed              Boolean               @default(false)
+
+  stall                 Stall                 @relation(fields: [stallId], references: [id], onDelete: Cascade)
+
+  @@unique([stallId, dayOfWeek])
+}
+
+model StallCapacity {
+  id                         String           @id @default(uuid())
+  stallId                    String           @unique
+  maxActiveOrders            Int              @default(20)
+  maxOrdersPerWindow         Int              @default(15)
+  windowDurationMinutes      Int              @default(30)
+  maxOrdersPerPickupInterval Int              @default(5)
+  pickupIntervalMinutes      Int              @default(10)
+  parallelPreparationLimit   Int              @default(4)
+  operationalBufferMinutes   Int              @default(2)
+  pickupGracePeriodMinutes   Int              @default(15)
+  updatedAt                  DateTime         @updatedAt
+
+  stall                      Stall            @relation(fields: [stallId], references: [id], onDelete: Cascade)
+}
+
+model StaffAccount {
+  id                    String                @id @default(uuid())
+  userId                String                @unique
+  stallId               String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stall                 Stall                 @relation(fields: [stallId], references: [id], onDelete: Cascade)
+  permissions           StaffPermission[]
+
+  @@index([stallId])
+}
+
+model StaffPermission {
+  id                    String                @id @default(uuid())
+  staffAccountId        String
+  permission            StaffPermissionType
+
+  staffAccount          StaffAccount          @relation(fields: [staffAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([staffAccountId, permission])
+}
+
+// ==========================================
+// MENU & INVENTORY MODELS
+// ==========================================
+
+model MenuItem {
+  id                     String                @id @default(uuid())
+  stallId                String
+  name                   String
+  description            String?
+  imageUrl               String?
+  price                  Decimal               @db.Decimal(10, 2)
+  category               String
+  isVegetarian           Boolean               @default(true)
+  ingredients            String[]              @default([])
+  allergens              String[]              @default([])
+  preparationTimeMinutes Int                   @default(10)
+  availabilityState      ItemAvailabilityState @default(AVAILABLE)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  deletedAt              DateTime?
+
+  stall                  Stall                 @relation(fields: [stallId], references: [id], onDelete: Cascade)
+  inventory              MenuItemInventory?
+  orderItems             OrderItem[]
+
+  @@index([stallId])
+  @@index([category])
+  @@index([availabilityState])
+}
+
+model MenuItemInventory {
+  id                    String                @id @default(uuid())
+  menuItemId            String                @unique
+  availableQuantity     Int                   @default(0)
+  reservedQuantity      Int                   @default(0)
+  updatedAt             DateTime              @updatedAt
+
+  menuItem              MenuItem              @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// ORDERING MODELS
+// ==========================================
+
+model MasterOrder {
+  id                    String                @id @default(uuid())
+  studentId             String
+  orderNumber           String                @unique
+  status                MasterOrderStatus     @default(PENDING_PAYMENT)
+  totalAmount           Decimal               @db.Decimal(10, 2)
+  advancePercentage     Int                   // Must be one of 50, 60, 70, 80, 90, 100
+  advanceAmount         Decimal               @db.Decimal(10, 2)
+  remainingAmount       Decimal               @db.Decimal(10, 2)
+  amountPaid            Decimal               @default(0.00) @db.Decimal(10, 2)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  student               User                  @relation(fields: [studentId], references: [id])
+  subOrders             SubOrder[]
+  payments              Payment[]
+
+  @@index([studentId])
+  @@index([status])
+  @@index([orderNumber])
+}
+
+model SubOrder {
+  id                    String                @id @default(uuid())
+  masterOrderId         String
+  stallId               String
+  subOrderNumber        String                @unique
+  status                SubOrderStatus        @default(PENDING_PAYMENT)
+  subtotalAmount        Decimal               @db.Decimal(10, 2)
+  advancePaidAmount     Decimal               @default(0.00) @db.Decimal(10, 2)
+  balanceDueAmount      Decimal               @db.Decimal(10, 2)
+  isBalancePaid         Boolean               @default(false)
+  pickupGraceExpiresAt  DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  masterOrder           MasterOrder           @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+  stall                 Stall                 @relation(fields: [stallId], references: [id])
+  items                 OrderItem[]
+  pickupSchedule        PickupSchedule?
+  refund                Refund?
+
+  @@index([masterOrderId])
+  @@index([stallId])
+  @@index([status])
+  @@index([subOrderNumber])
+}
+
+model OrderItem {
+  id                     String                @id @default(uuid())
+  subOrderId             String
+  menuItemId             String?
+  // Immutable historical snapshots preserved at checkout
+  snapshotItemName       String
+  snapshotPrice          Decimal               @db.Decimal(10, 2)
+  snapshotPrepMinutes    Int
+  quantity               Int
+  totalPrice             Decimal               @db.Decimal(10, 2)
+  createdAt              DateTime              @default(now())
+
+  subOrder               SubOrder              @relation(fields: [subOrderId], references: [id], onDelete: Cascade)
+  menuItem               MenuItem?             @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+
+  @@index([subOrderId])
+}
+
+// ==========================================
+// SCHEDULING MODELS
+// ==========================================
+
+model PickupSchedule {
+  id                           String          @id @default(uuid())
+  subOrderId                   String          @unique
+  requestedPickupTime          DateTime
+  scheduledPickupTime          DateTime
+  earliestFeasiblePickupTime   DateTime
+  preparationTimeMinutes       Int
+  queueDelayMinutes            Int
+  operationalBufferMinutes     Int
+  capacityConstraintApplied    Boolean         @default(false)
+  rescheduleCount              Int             @default(0)
+  rescheduleReason             String?
+  createdAt                    DateTime        @default(now())
+  updatedAt                    DateTime        @updatedAt
+
+  subOrder                     SubOrder        @relation(fields: [subOrderId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledPickupTime])
+}
+
+// ==========================================
+// PAYMENT & REFUND MODELS
+// ==========================================
+
+model Payment {
+  id                    String                @id @default(uuid())
+  masterOrderId         String
+  idempotencyKey        String                @unique
+  provider              String                @default("mock")
+  providerPaymentId     String?               @unique
+  status                PaymentStatus         @default(INITIATED)
+  advancePercentage     Int
+  totalAmount           Decimal               @db.Decimal(10, 2)
+  advanceAmount         Decimal               @db.Decimal(10, 2)
+  amountPaid            Decimal               @default(0.00) @db.Decimal(10, 2)
+  amountRemaining       Decimal               @db.Decimal(10, 2)
+  upiVpa                String?
+  verifiedAt            DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  masterOrder           MasterOrder           @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+  transactions          PaymentTransaction[]
+
+  @@index([masterOrderId])
+  @@index([status])
+  @@index([idempotencyKey])
+}
+
+model PaymentTransaction {
+  id                    String                @id @default(uuid())
+  paymentId             String
+  transactionType       TransactionType
+  amount                Decimal               @db.Decimal(10, 2)
+  providerTransactionId String?               @unique
+  paymentMethod         String                @default("UPI")
+  status                PaymentStatus         @default(INITIATED)
+  expiresAt             DateTime?
+  gatewayResponse       Json?
+  createdAt             DateTime              @default(now())
+
+  payment               Payment               @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([status])
+}
+
+model Refund {
+  id                    String                @id @default(uuid())
+  subOrderId            String                @unique
+  idempotencyKey        String                @unique
+  amountPaidForSuborder Decimal               @db.Decimal(10, 2)
+  refundAmount          Decimal               @db.Decimal(10, 2)
+  refundReason          String
+  refundReference       String?
+  refundStatus          RefundStatus          @default(REFUND_PENDING)
+  providerRefundId      String?
+  initiatedAt           DateTime              @default(now())
+  completedAt           DateTime?
+
+  subOrder              SubOrder              @relation(fields: [subOrderId], references: [id], onDelete: Cascade)
+
+  @@index([refundStatus])
+  @@index([idempotencyKey])
+}
+
+// ==========================================
+// AUDIT & INTEGRITY MODELS
+// ==========================================
+
+model AuditLog {
+  id                    String                @id @default(uuid())
+  sequenceNumber        BigInt                @unique @default(autoincrement())
+  actorId               String?
+  actionType            AuditActionType
+  targetEntity          String
+  targetId              String
+  previousValue         Json?
+  newValue              Json?
+  reason                String?
+  sessionReference      String?
+  timestamp             DateTime              @default(now())
+  previousHash          String
+  currentHash           String                @unique
+
+  actor                 User?                 @relation("ActorAuditLogs", fields: [actorId], references: [id])
+
+  @@index([targetEntity, targetId])
+  @@index([actorId])
+  @@index([sequenceNumber])
+}
+
+model IdempotencyRecord {
+  id                    String                @id @default(uuid())
+  key                   String                @unique
+  targetAction          String
+  requestHash           String
+  responsePayload       Json?
+  statusCode            Int?
+  isCompleted           Boolean               @default(false)
+  expiresAt             DateTime
+  createdAt             DateTime              @default(now())
+
+  @@index([key])
+  @@index([expiresAt])
+}
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+model Notification {
+  id                    String                @id @default(uuid())
+  userId                String
+  type                  NotificationType
+  title                 String
+  message               String
+  payload               Json?
+  isRead                Boolean               @default(false)
+  createdAt             DateTime              @default(now())
+
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+// ==========================================
+// REAL-TIME EVENT OUTBOX (PHASE 6)
+// ==========================================
+
+model EventOutbox {
+  id              String    @id @default(uuid())
+  channel         String    @db.VarChar(100)
+  sequenceNumber  BigInt
+  eventType       String    @db.VarChar(100)
+  aggregateType   String    @db.VarChar(50)
+  aggregateId     String    @db.VarChar(100)
+  payload         Json
+  payloadVersion  Int       @default(1)
+  correlationId   String    @db.VarChar(100)
+  createdAt       DateTime  @default(now())
+  publishedAt     DateTime?
+
+  @@unique([channel, sequenceNumber], name: "uq_outbox_channel_seq")
+  @@index([channel, sequenceNumber(sort: Asc)], name: "idx_outbox_replay")
+  @@index([publishedAt], name: "idx_outbox_unpublished")
+}

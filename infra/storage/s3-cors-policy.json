@@ -1,0 +1,24 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": [
+        "https://campuseats.university.edu"
+      ],
+      "AllowedMethods": [
+        "GET",
+        "HEAD"
+      ],
+      "AllowedHeaders": [
+        "Authorization",
+        "Content-Type",
+        "Range"
+      ],
+      "ExposeHeaders": [
+        "Content-Length",
+        "Content-Type",
+        "ETag"
+      ],
+      "MaxAgeSeconds": 3000
+    }
+  ]
+}

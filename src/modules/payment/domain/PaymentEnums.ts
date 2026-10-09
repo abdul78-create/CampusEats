@@ -1,0 +1,24 @@
+// Payment Domain Enums
+
+export enum PaymentStatus {
+  INITIATED = 'INITIATED',
+  PENDING_VERIFICATION = 'PENDING_VERIFICATION',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+  PARTIALLY_PAID = 'PARTIALLY_PAID',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum TransactionType {
+  ADVANCE = 'ADVANCE',
+  REMAINING_BALANCE = 'REMAINING_BALANCE',
+}
+
+export enum RefundStatus {
+  REFUND_PENDING = 'REFUND_PENDING',
+  PROCESSING = 'PROCESSING',
+  REFUNDED = 'REFUNDED',
+  FAILED = 'FAILED',
+}
+
+export type PaymentPurpose = 'ADVANCE' | 'REMAINING_BALANCE';

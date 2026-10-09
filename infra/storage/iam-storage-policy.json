@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowBucketMetadataListing",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::campuseats-production-identity-documents"
+    },
+    {
+      "Sid": "AllowPrivateDocumentObjectOperations",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::campuseats-production-identity-documents/*"
+    },
+    {
+      "Sid": "AllowKmsKeyUsageForObjectEncryption",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:ReEncrypt*",
+        "kms:GenerateDataKey*",
+        "kms:DescribeKey"
+      ],
+      "Resource": "arn:aws:kms:ap-south-1:ACCOUNT_ID:key/CAMPUS_EATS_STORAGE_KEY_ID"
+    }
+  ]
+}
